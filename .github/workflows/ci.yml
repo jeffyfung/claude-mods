@@ -1,0 +1,27 @@
+# Throwaway CI workflow to exercise the pr-ci-status mod's display.
+name: test-ci
+
+on:
+  pull_request:
+
+jobs:
+  pass:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "this job always passes"
+
+  fail:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "about to fail" && exit 1
+
+  slow:
+    runs-on: ubuntu-latest
+    steps:
+      - run: sleep 90
+
+  queued:
+    needs: slow
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "this waits for slow"
