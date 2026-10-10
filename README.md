@@ -41,7 +41,7 @@ A row shows:
 - `✗` failed check runs
 - `✓` successful check runs
 - `💬` unresolved review threads
-- green text + trailing `✓` when the PR is ready to merge
+- green text + trailing `✓` when the PR is ready to merge, `✓ merged` once it's merged
 - the selected row is highlighted (inverted)
 
 The status refreshes every 30 seconds and needs the `gh` CLI authenticated

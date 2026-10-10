@@ -63,7 +63,7 @@ export const register: Register = on => {
             autoFocus={i === 0}
             onPress={() => void openPr($, p.number)}
           >
-            <Text color={p.mergeable ? 'success' : p.error ? 'error' : undefined}>
+            <Text color={p.merged || p.mergeable ? 'success' : p.error ? 'error' : undefined}>
               {formatRow(p, false, columns)}
             </Text>
           </Button>
@@ -98,6 +98,7 @@ async function addPr($: EngineInterface, number: number): Promise<void> {
     failed: 0,
     succeeded: 0,
     unresolved: 0,
+    merged: false,
     mergeable: false,
   }
   await update($, prsAtom, list =>
@@ -165,6 +166,7 @@ async function fetchPr($: EngineInterface, repo: string, number: number): Promis
     failed,
     succeeded,
     unresolved,
+    merged,
     mergeable: isMergeable({ draft, merged, mergeableState, failed, running }),
   }
 }

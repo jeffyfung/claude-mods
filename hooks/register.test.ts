@@ -59,6 +59,7 @@ test('transitionMessage flags newly failing and newly mergeable PRs only', () =>
     failed: 0,
     succeeded: 3,
     unresolved: 0,
+    merged: false,
     mergeable: false,
   }
   expect(transitionMessage(base, { ...base, failed: 1 })).toBe('PR #659: 1 check failing')
@@ -80,6 +81,7 @@ test('formatRow shows all counts, the ready marker, and truncates to width', () 
     failed: 1,
     succeeded: 5,
     unresolved: 1,
+    merged: false,
     mergeable: true,
   }
   const row = formatRow(pr, false, 40)
@@ -93,6 +95,21 @@ test('formatRow shows all counts, the ready marker, and truncates to width', () 
 
   const notReady = formatRow({ ...pr, mergeable: false }, false, 40)
   expect(notReady.endsWith('💬1')).toBe(true)
+})
+
+test('formatRow marks a merged PR', () => {
+  const merged: PrStatus = {
+    number: 660,
+    repo: 'o/r',
+    title: 't',
+    running: 0,
+    failed: 0,
+    succeeded: 0,
+    unresolved: 0,
+    merged: true,
+    mergeable: false,
+  }
+  expect(formatRow(merged, false, 40)).toContain('✓ merged')
 })
 
 test('pr status clear is dropped before it reaches the model', async $ => {

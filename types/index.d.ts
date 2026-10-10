@@ -4,6 +4,8 @@ export type PrStatus = {
   /** The repository as `owner/name`. */
   repo: string
   title: string
+  /** True once the PR is merged. */
+  merged: boolean
   /** Check runs queued or in progress (○). */
   running: number
   /** Check runs that failed, cancelled, timed out, etc. (✗). */

@@ -63,7 +63,7 @@ export function formatRow(pr: PrStatus, selected: boolean, width: number): strin
   const cursor = selected ? '▸' : ' '
   const head = `#${pr.number}`
   const counts = `○${pr.running} ✗${pr.failed} ✓${pr.succeeded} 💬${pr.unresolved}`
-  const ready = pr.mergeable ? ' ✓' : ''
+  const ready = pr.merged ? ' ✓ merged' : pr.mergeable ? ' ✓' : ''
   const error = pr.error ? ' ⚠' : ''
   const tail = `${counts}${ready}${error}`
   const fixed = `${cursor} ${head}  `.length + tail.length
