@@ -1,0 +1,29 @@
+# Example CI workflow to exercise every status the pr-ci-status mod shows.
+# Copy this into any GitHub repo at .github/workflows/ci.yml, push a branch,
+# open a PR, then run `pr status <number>` in Claude Code.
+name: example-ci
+
+on:
+  pull_request:
+
+jobs:
+  pass:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "this job always passes"
+
+  fail:
+    runs-on: ubuntu-latest
+    steps:
+      - run: exit 1
+
+  slow:
+    runs-on: ubuntu-latest
+    steps:
+      - run: sleep 90
+
+  queued:
+    needs: slow
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "this waits for slow"
