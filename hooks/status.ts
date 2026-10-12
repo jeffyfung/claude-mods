@@ -91,3 +91,25 @@ export function transitionMessage(old: PrStatus, fresh: PrStatus): string | null
   }
   return null
 }
+
+export type ResolveDetails = {
+  failedChecks: string[]
+  comments: { path: string; body: string }[]
+}
+
+export function buildResolvePrompt(repo: string, number: number, details: ResolveDetails): string {
+  const lines = [`Investigate and fix PR #${number} in ${repo}.`]
+  if (details.failedChecks.length > 0) {
+    lines.push('', 'Failing checks:')
+    for (const c of details.failedChecks) lines.push(`- ${c}`)
+  }
+  if (details.comments.length > 0) {
+    lines.push('', 'Unresolved review comments:')
+    for (const c of details.comments) lines.push(`- ${c.path || '(no file)'}: ${c.body}`)
+  }
+  if (details.failedChecks.length === 0 && details.comments.length === 0) {
+    lines.push('', 'No failing checks or unresolved review comments were found.')
+  }
+  lines.push('', 'Investigate these issues, fix the code, and summarize the changes you made.')
+  return lines.join('\n')
+}

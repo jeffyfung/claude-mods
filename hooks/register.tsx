@@ -2,7 +2,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { PrStatus } from '../types'
-import { computeCheckCounts, formatRow, isMergeable, resolveRepoFromRemote, transitionMessage } from './status'
+import { buildResolvePrompt, computeCheckCounts, formatRow, isMergeable, resolveRepoFromRemote, transitionMessage } from './status'
+import type { ResolveDetails } from './status'
 
 const prsAtom = atom({ plugin: 'pr-ci-status', key: 'prs' } as const, [] as PrStatus[])
 
@@ -68,9 +69,14 @@ export const register: Register = on => {
             </Text>
           </Button>
         ))}
-        <Button key="clear" plain dimColor hotkey="x" onPress={() => void clearFocused($)}>
-          clear
-        </Button>
+        <Box flexDirection="row" gap={2}>
+          <Button key="clear" plain dimColor hotkey="x" onPress={() => void clearFocused($)}>
+            clear
+          </Button>
+          <Button key="resolve" plain dimColor hotkey="r" onPress={() => void resolveFocused($)}>
+            resolve
+          </Button>
+        </Box>
       </Box>
     )
   })
@@ -222,4 +228,60 @@ async function clearFocused($: EngineInterface): Promise<void> {
   if (n == null) return
   await update($, prsAtom, list => list.filter(p => p.number !== n))
   focusedNumber = null
+}
+
+async function resolveFocused($: EngineInterface): Promise<void> {
+  const n = focusedNumber
+  if (n == null || !repo) return
+  const details = await fetchResolveDetails($, repo, n).catch(
+    () => ({ failedChecks: [], comments: [] } as ResolveDetails),
+  )
+  await $.prompt.submit({ text: buildResolvePrompt(repo, n, details) })
+}
+
+async function fetchResolveDetails($: EngineInterface, repo: string, number: number): Promise<ResolveDetails> {
+  const pr = await ghJson($, [`repos/${repo}/pulls/${number}`])
+  const headSha: string = pr?.head?.sha ?? ''
+
+  const failedChecks: string[] = []
+  if (headSha) {
+    const cr = await ghJson($, [`repos/${repo}/commits/${headSha}/check-runs?per_page=100`])
+    const seen = new Set<string>()
+    for (const r of cr?.check_runs ?? []) {
+      if (seen.has(r.name)) continue
+      seen.add(r.name)
+      const failed =
+        r.status === 'completed' &&
+        !!r.conclusion &&
+        r.conclusion !== 'success' &&
+        r.conclusion !== 'neutral' &&
+        r.conclusion !== 'skipped'
+      if (!failed) continue
+      const summary: string = r.output?.summary || r.output?.title || ''
+      failedChecks.push(summary ? `${r.name}: ${summary}` : r.name)
+    }
+  }
+
+  const comments: ResolveDetails['comments'] = []
+  const [owner, name] = repo.split('/')
+  if (owner && name) {
+    const query =
+      'query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved comments(first:20){nodes{body path}}}}}}}'
+    const res = await ghJson($, [
+      'graphql',
+      '-f', `query=${query}`,
+      '-f', `o=${owner}`,
+      '-f', `r=${name}`,
+      '-F', `n=${number}`,
+    ])
+    const threads = res?.data?.repository?.pullRequest?.reviewThreads?.nodes ?? []
+    for (const t of threads) {
+      if (t.isResolved) continue
+      for (const c of t.comments?.nodes ?? []) {
+        if (c?.body) comments.push({ path: c.path ?? '', body: c.body })
+      }
+    }
+  }
+
+  return { failedChecks, comments }
 }

@@ -29,7 +29,8 @@ pr status clear      clear every row
 
 In the band: `ctrl+x tab` (or click it) focuses the band; `↑`/`↓` (or `Tab`)
 move the selection; `Enter` opens the selected PR in your browser; `x` clears
-the selected row; `Esc` returns focus to the prompt.
+the selected row; `r` hands its CI failures and review comments to the session
+to investigate and fix; `Esc` returns focus to the prompt.
 
 A row shows:
 

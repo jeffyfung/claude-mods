@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { computeCheckCounts, formatRow, isMergeable, resolveRepoFromRemote, transitionMessage, truncate } from './status'
+import { buildResolvePrompt, computeCheckCounts, formatRow, isMergeable, resolveRepoFromRemote, transitionMessage, truncate } from './status'
 import type { PrStatus } from '../types'
 
 test('computeCheckCounts maps statuses and dedupes by name', () => {
@@ -110,6 +110,22 @@ test('formatRow marks a merged PR', () => {
     mergeable: false,
   }
   expect(formatRow(merged, false, 40)).toContain('✓ merged')
+})
+
+test('buildResolvePrompt lists failing checks and review comments', () => {
+  const prompt = buildResolvePrompt('o/r', 659, {
+    failedChecks: ['lint: missing semicolon', 'test: 3 failures'],
+    comments: [{ path: 'src/foo.ts', body: 'use a const here' }],
+  })
+  expect(prompt).toContain('PR #659')
+  expect(prompt).toContain('lint: missing semicolon')
+  expect(prompt).toContain('test: 3 failures')
+  expect(prompt).toContain('src/foo.ts: use a const here')
+})
+
+test('buildResolvePrompt handles an empty PR', () => {
+  const prompt = buildResolvePrompt('o/r', 659, { failedChecks: [], comments: [] })
+  expect(prompt).toContain('No failing checks or unresolved review comments were found.')
 })
 
 test('pr status clear is dropped before it reaches the model', async $ => {
