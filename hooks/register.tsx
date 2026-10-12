@@ -60,7 +60,7 @@ export const register: Register = on => {
           <Button
             key={`pr-${p.number}`}
             plain
-            autoFocus={i === 0}
+            autoFocus={i === 0 ? true : undefined}
             onPress={() => void openPr($, p.number)}
           >
             <Text color={p.merged || p.mergeable ? 'success' : p.error ? 'error' : undefined}>
