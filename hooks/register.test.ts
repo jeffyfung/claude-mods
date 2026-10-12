@@ -134,6 +134,7 @@ test('buildResolvePrompt lists failing checks and review comments', () => {
   expect(prompt).toContain('lint: missing semicolon')
   expect(prompt).toContain('test: 3 failures')
   expect(prompt).toContain('src/foo.ts: use a const here')
+  expect(prompt).toContain('Commit and push any fix')
 })
 
 test('buildResolvePrompt handles an empty PR', () => {

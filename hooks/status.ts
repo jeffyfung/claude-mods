@@ -102,7 +102,7 @@ export type ResolveDetails = {
 export function buildResolvePrompt(repo: string, number: number, details: ResolveDetails, round?: number): string {
   const lines = [`Investigate and fix PR #${number} in ${repo}.`]
   if (round != null) lines.push(`This is fix attempt ${round} of 3.`)
-  lines.push('Commit and push your changes so CI re-runs.')
+  lines.push('Commit and push any fix you make to this PR so CI re-runs, unless it is explicitly out of scope for this work.')
   if (details.failedChecks.length > 0) {
     lines.push('', 'Failing checks:')
     for (const c of details.failedChecks) lines.push(`- ${c}`)
