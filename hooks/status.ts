@@ -64,8 +64,9 @@ export function formatRow(pr: PrStatus, selected: boolean, width: number): strin
   const head = `#${pr.number}`
   const counts = `○${pr.running} ✗${pr.failed} ✓${pr.succeeded} 💬${pr.unresolved}`
   const ready = pr.merged ? ' ✓ merged' : pr.mergeable ? ' ✓' : ''
+  const resolve = pr.resolving ? ` ⟳${pr.resolveRounds}/3` : ''
   const error = pr.error ? ' ⚠' : ''
-  const tail = `${counts}${ready}${error}`
+  const tail = `${counts}${ready}${resolve}${error}`
   const fixed = `${cursor} ${head}  `.length + tail.length
   const avail = Math.max(4, width - fixed)
   const title = truncate(pr.title || '…', avail)
@@ -90,4 +91,44 @@ export function transitionMessage(old: PrStatus, fresh: PrStatus): string | null
     return `PR #${fresh.number}: ready to merge`
   }
   return null
+}
+
+export type ResolveDetails = {
+  headSha: string
+  failedChecks: string[]
+  comments: { path: string; body: string }[]
+}
+
+export function buildResolvePrompt(repo: string, number: number, details: ResolveDetails, round?: number): string {
+  const lines = [`Investigate and fix PR #${number} in ${repo}.`]
+  if (round != null) lines.push(`This is fix attempt ${round} of 3.`)
+  lines.push('Commit and push any fix you make to this PR so CI re-runs, unless it is explicitly out of scope for this work.')
+  if (details.failedChecks.length > 0) {
+    lines.push('', 'Failing checks:')
+    for (const c of details.failedChecks) lines.push(`- ${c}`)
+  }
+  if (details.comments.length > 0) {
+    lines.push('', 'Unresolved review comments:')
+    for (const c of details.comments) lines.push(`- ${c.path || '(no file)'}: ${c.body}`)
+  }
+  if (details.failedChecks.length === 0 && details.comments.length === 0) {
+    lines.push('', 'No failing checks or unresolved review comments were found.')
+  }
+  lines.push('', 'Investigate these issues, fix the code, and summarize the changes you made.')
+  return lines.join('\n')
+}
+
+export type ResolveAction =
+  | { kind: 'submit'; round: number }
+  | { kind: 'done' }
+  | { kind: 'confirm' }
+  | { kind: 'wait' }
+
+/** What the resolve loop should do next, given the previous state and fresh CI data. */
+export function nextResolveAction(old: PrStatus, fresh: PrStatus): ResolveAction {
+  if (fresh.failed === 0 && fresh.running === 0) return { kind: 'done' }
+  if (fresh.failed > 0 && fresh.running === 0 && fresh.headSha !== old.resolveSha) {
+    return old.resolveRounds < 3 ? { kind: 'submit', round: old.resolveRounds + 1 } : { kind: 'confirm' }
+  }
+  return { kind: 'wait' }
 }
