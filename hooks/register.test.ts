@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { buildResolvePrompt, computeCheckCounts, formatRow, isMergeable, resolveRepoFromRemote, transitionMessage, truncate } from './status'
+import { buildResolvePrompt, computeCheckCounts, formatRow, isMergeable, nextResolveAction, resolveRepoFromRemote, transitionMessage, truncate } from './status'
 import type { PrStatus } from '../types'
 
 test('computeCheckCounts maps statuses and dedupes by name', () => {
@@ -60,7 +60,11 @@ test('transitionMessage flags newly failing and newly mergeable PRs only', () =>
     succeeded: 3,
     unresolved: 0,
     merged: false,
+    headSha: '',
     mergeable: false,
+    resolving: false,
+    resolveRounds: 0,
+    resolveSha: '',
   }
   expect(transitionMessage(base, { ...base, failed: 1 })).toBe('PR #659: 1 check failing')
   expect(transitionMessage(base, { ...base, failed: 2 })).toBe('PR #659: 2 checks failing')
@@ -82,7 +86,11 @@ test('formatRow shows all counts, the ready marker, and truncates to width', () 
     succeeded: 5,
     unresolved: 1,
     merged: false,
+    headSha: '',
     mergeable: true,
+    resolving: false,
+    resolveRounds: 0,
+    resolveSha: '',
   }
   const row = formatRow(pr, false, 40)
   expect(row).toContain('#659')
@@ -107,13 +115,18 @@ test('formatRow marks a merged PR', () => {
     succeeded: 0,
     unresolved: 0,
     merged: true,
+    headSha: '',
     mergeable: false,
+    resolving: false,
+    resolveRounds: 0,
+    resolveSha: '',
   }
   expect(formatRow(merged, false, 40)).toContain('✓ merged')
 })
 
 test('buildResolvePrompt lists failing checks and review comments', () => {
   const prompt = buildResolvePrompt('o/r', 659, {
+    headSha: '',
     failedChecks: ['lint: missing semicolon', 'test: 3 failures'],
     comments: [{ path: 'src/foo.ts', body: 'use a const here' }],
   })
@@ -124,8 +137,52 @@ test('buildResolvePrompt lists failing checks and review comments', () => {
 })
 
 test('buildResolvePrompt handles an empty PR', () => {
-  const prompt = buildResolvePrompt('o/r', 659, { failedChecks: [], comments: [] })
+  const prompt = buildResolvePrompt('o/r', 659, { headSha: '', failedChecks: [], comments: [] })
   expect(prompt).toContain('No failing checks or unresolved review comments were found.')
+})
+
+test('nextResolveAction drives the 3-round cap', () => {
+  const mk = (over: Partial<PrStatus> = {}): PrStatus => ({
+    number: 659,
+    repo: 'o/r',
+    title: 't',
+    running: 0,
+    failed: 1,
+    succeeded: 0,
+    unresolved: 0,
+    merged: false,
+    headSha: 'shaB',
+    mergeable: false,
+    resolving: true,
+    resolveRounds: 1,
+    resolveSha: 'shaA',
+    ...over,
+  })
+
+  expect(nextResolveAction(mk(), mk())).toEqual({ kind: 'submit', round: 2 })
+  expect(nextResolveAction(mk({ resolveRounds: 3 }), mk())).toEqual({ kind: 'confirm' })
+  expect(nextResolveAction(mk({ resolveSha: 'shaB' }), mk())).toEqual({ kind: 'wait' })
+  expect(nextResolveAction(mk(), mk({ failed: 0 }))).toEqual({ kind: 'done' })
+  expect(nextResolveAction(mk(), mk({ failed: 0, running: 1 }))).toEqual({ kind: 'wait' })
+})
+
+test('formatRow shows the resolve marker', () => {
+  const resolving: PrStatus = {
+    number: 661,
+    repo: 'o/r',
+    title: 't',
+    running: 0,
+    failed: 1,
+    succeeded: 0,
+    unresolved: 0,
+    merged: false,
+    headSha: '',
+    mergeable: false,
+    resolving: true,
+    resolveRounds: 2,
+    resolveSha: '',
+  }
+  expect(formatRow(resolving, false, 40)).toContain('⟳2/3')
 })
 
 test('pr status clear is dropped before it reaches the model', async $ => {

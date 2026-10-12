@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { PrStatus } from '../types'
-import { buildResolvePrompt, computeCheckCounts, formatRow, isMergeable, resolveRepoFromRemote, transitionMessage } from './status'
+import { buildResolvePrompt, computeCheckCounts, formatRow, isMergeable, nextResolveAction, resolveRepoFromRemote, transitionMessage } from './status'
 import type { ResolveDetails } from './status'
 
 const prsAtom = atom({ plugin: 'pr-ci-status', key: 'prs' } as const, [] as PrStatus[])
@@ -105,7 +105,11 @@ async function addPr($: EngineInterface, number: number): Promise<void> {
     succeeded: 0,
     unresolved: 0,
     merged: false,
+    headSha: '',
     mergeable: false,
+    resolving: false,
+    resolveRounds: 0,
+    resolveSha: '',
   }
   await update($, prsAtom, list =>
     list.some(p => p.number === number) ? list : [...list, placeholder],
@@ -134,7 +138,9 @@ async function poll($: EngineInterface): Promise<void> {
       if (message) notify($, message)
     })
 
-    const byNumber = new Map(results.map(r => [r.number, r]))
+    // Drive the resolve loop and carry its state forward.
+    const next = list.map((old, i) => resolveNext($, old, results[i]))
+    const byNumber = new Map(next.map(r => [r.number, r]))
     await update($, prsAtom, current => current.map(p => byNumber.get(p.number) ?? p))
   } finally {
     polling = false
@@ -173,7 +179,11 @@ async function fetchPr($: EngineInterface, repo: string, number: number): Promis
     succeeded,
     unresolved,
     merged,
+    headSha,
     mergeable: isMergeable({ draft, merged, mergeableState, failed, running }),
+    resolving: false,
+    resolveRounds: 0,
+    resolveSha: '',
   }
 }
 
@@ -233,10 +243,30 @@ async function clearFocused($: EngineInterface): Promise<void> {
 async function resolveFocused($: EngineInterface): Promise<void> {
   const n = focusedNumber
   if (n == null || !repo) return
+  const list = await read($, prsAtom)
+  const pr = list.find(p => p.number === n)
+  if (!pr) return
+
+  if (pr.resolving) {
+    await update($, prsAtom, l =>
+      l.map(p => (p.number === n ? { ...p, resolving: false, resolveRounds: 0, resolveSha: '' } : p)),
+    )
+    $.ui.toast(`stopped resolving PR #${n}`)
+    return
+  }
+
   const details = await fetchResolveDetails($, repo, n).catch(
-    () => ({ failedChecks: [], comments: [] } as ResolveDetails),
+    () => ({ headSha: pr.headSha, failedChecks: [], comments: [] } as ResolveDetails),
   )
-  await $.prompt.submit({ text: buildResolvePrompt(repo, n, details) })
+  await $.prompt.submit({ text: buildResolvePrompt(repo, n, details, 1) })
+  await update($, prsAtom, l =>
+    l.map(p =>
+      p.number === n
+        ? { ...p, resolving: true, resolveRounds: 1, resolveSha: details.headSha || pr.headSha }
+        : p,
+    ),
+  )
+  $.ui.toast(`resolving PR #${n} (round 1/3)`)
 }
 
 async function fetchResolveDetails($: EngineInterface, repo: string, number: number): Promise<ResolveDetails> {
@@ -283,5 +313,32 @@ async function fetchResolveDetails($: EngineInterface, repo: string, number: num
     }
   }
 
-  return { failedChecks, comments }
+  return { headSha, failedChecks, comments }
+}
+
+async function submitResolvePrompt($: EngineInterface, repo: string, number: number, round: number): Promise<void> {
+  const details = await fetchResolveDetails($, repo, number).catch(
+    () => ({ headSha: '', failedChecks: [], comments: [] } as ResolveDetails),
+  )
+  await $.prompt.submit({ text: buildResolvePrompt(repo, number, details, round) })
+}
+
+function resolveNext($: EngineInterface, old: PrStatus, fresh: PrStatus): PrStatus {
+  const base = { ...fresh, resolving: old.resolving, resolveRounds: old.resolveRounds, resolveSha: old.resolveSha }
+  if (!old.resolving || fresh.error) return base
+
+  const action = nextResolveAction(old, fresh)
+  if (action.kind === 'done') {
+    notify($, `PR #${fresh.number} is green after resolve`)
+    return { ...base, resolving: false, resolveRounds: 0, resolveSha: '' }
+  }
+  if (action.kind === 'submit') {
+    void submitResolvePrompt($, repo, fresh.number, action.round)
+    return { ...base, resolving: true, resolveRounds: action.round, resolveSha: fresh.headSha }
+  }
+  if (action.kind === 'confirm') {
+    notify($, `PR #${fresh.number} still failing after 3 fix rounds — needs your input`)
+    return { ...base, resolving: false, resolveRounds: 0, resolveSha: '' }
+  }
+  return base
 }
