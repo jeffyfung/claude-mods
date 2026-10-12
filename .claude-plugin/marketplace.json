@@ -1,0 +1,6 @@
+{
+  "name": "claude-mods",
+  "description": "Jeffrey Fung's Claude Code mods.",
+  "owner": { "name": "jeffyfung" },
+  "plugins": [{ "name": "pr-ci-status", "source": "./" }]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "pr-ci-status",
+  "version": "0.1.0",
+  "description": "Track GitHub PR CI status in an interactive band above the prompt: 'pr status 659' adds a row, Backspace clears it.",
+  "author": { "name": "Jeffrey Fung" },
+  "types": "./types/index.d.ts"
+}
